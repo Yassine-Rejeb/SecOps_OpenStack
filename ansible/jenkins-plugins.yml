@@ -1,0 +1,19 @@
+- name: Install jenkins plugins
+  hosts: remote_jenkins
+  gather_facts: no
+  vars_files:
+    - vars/jenkins_vars.yml
+    - vars/plugins.yml
+    - vault/jenkins-creds.yml
+  tasks:
+    - name: Get the IP of jenkins
+      command: terraform -chdir=../terraform/ output -raw jenkins_floating_ip
+      register: jenkinsIP 
+      delegate_to: localhost
+    - name: Authenticate and install plugins
+      community.general.jenkins_plugin:
+        name: "{{item}}"
+        url_username: "{{jenkins_admin}}"
+        url_password: "{{jenkins_password}}"
+        url: http://{{jenkinsIP.stdout}}:8080
+      loop: "{{plugins}}"

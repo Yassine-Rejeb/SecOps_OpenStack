@@ -1,0 +1,9 @@
+---
+- init_groovy_script : ../files/1_init.groovy
+- jenkins_model_xml : ../files/jenkins.model.JenkinsLocationConfiguration.xml
+- usercreation_groovy : ../files/2_userCreation.groovy
+- token_groovy : ../files/3_createToken.groovy
+- conf_xml : ../files/conf.xml
+- terraform_path : ../terraform
+- slave_secret_file : ../files/secrets/.slave_secret-node1
+- token_path : ../files/secrets/.token

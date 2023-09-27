@@ -1,0 +1,71 @@
+- name: Prepare the prod nod for jenkins connectivity
+  hosts: prod
+  gather_facts: no
+  vars_files:
+    - vars/jenkins_vars.yml
+    - vault/user-pass.yml
+  tasks:
+    - name: Set new password for the user
+      ansible.builtin.user:
+        name: centos
+        password: "{{ password | password_hash('sha512' ) }}"
+        update_password: always
+      ignore_errors: yes
+    - name : "nmcli dns : 8.8.8.8"
+      command: nmcli connection modify System\ eth0 ipv4.dns 8.8.8.8
+    - name: "Correcting centos repos"
+      shell: |
+        sudo sed -i 's/^mirrorlist=/#mirrorlist=/g' /etc/yum.repos.d/CentOS-*
+        sudo sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
+    - name: restart NetworkManager
+      service:
+        name: NetworkManager
+        state: restarted
+    - name: Install java on the prod
+      package:
+        name: java-17-openjdk-devel.x86_64,git
+        state: present
+    - name: Get the slave_secret
+      command: "cat {{slave_secret_file}}"
+      register: slave_secret
+      delegate_to: localhost
+    - name: Get the jenkins IP
+      command: "terraform -chdir={{terraform_path}} output -raw jenkins_floating_ip"
+      register: jenkins_ip
+      delegate_to: localhost
+    - name: Get the agent.jar file
+      get_url:
+        url: "http://{{jenkins_ip.stdout}}:8080/jnlpJars/agent.jar"
+        dest: /home/centos/agent.jar
+    - name: Set up cron job to run jenkins agent
+      cron:
+        name: Run agent
+        minute: "*"
+        job: 'nohup /usr/bin/java -jar /home/centos/agent.jar -jnlpUrl http://{{jenkins_ip.stdout}}:8080/manage/computer/node1/jenkins-agent.jnlp -secret {{slave_secret.stdout}} -workDir "/home/centos" -internalDir "null" > /dev/null 2>&1 &'
+
+- name: Install Sonar-Scanner
+  hosts: prod
+  gather_facts: no
+  tasks:
+    - name: Download SonarScanner
+      get_url:
+        url: https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006.zip
+        dest: /opt/sonar-scanner-cli-5.0.1.3006.zip
+
+    - name: Install unzip if not present
+      yum:
+        name: unzip
+        state: present
+
+    - name: Extract SonarScanner
+      unarchive:
+        src: /opt/sonar-scanner-cli-5.0.1.3006.zip
+        dest: /opt/
+        remote_src: yes
+
+    - name: Create symbolic link to sonar-scanner binary
+      file:
+        src: /opt/sonar-scanner-5.0.1.3006/bin/sonar-scanner
+        dest: /usr/bin/sonar-scanner
+        state: link
+...

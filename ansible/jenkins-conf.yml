@@ -1,0 +1,100 @@
+---
+- name: Configure sonarqube server in Jenkins
+  hosts: jenkins
+  gather_facts: no
+  vars_files:
+    - vault/jenkins-creds.yml
+  tasks:
+    - name: Get the sonarqube floating IP
+      command: terraform -chdir=../terraform/ output -raw sonar_floating_ip
+      register: sonarIP
+      delegate_to: localhost
+
+    - name: Add SonarQube server configuration to Jenkins
+      blockinfile:
+        path: /var/lib/jenkins/hudson.plugins.sonar.SonarGlobalConfiguration.xml
+        create: yes
+        block: |
+          <?xml version='1.1' encoding='UTF-8'?>
+          <hudson.plugins.sonar.SonarGlobalConfiguration plugin="sonar@2.15">
+            <installations>
+              <hudson.plugins.sonar.SonarInstallation>
+                <name>Sonar Server</name>
+                <serverUrl>http://{{sonarIP.stdout}}:9000</serverUrl>
+                <credentialsId>d712a4dd53e179cf264a53e6bccb626aa6925551</credentialsId>
+                <webhookSecretId></webhookSecretId>
+                <mojoVersion></mojoVersion>
+                <additionalProperties></additionalProperties>
+                <additionalAnalysisProperties></additionalAnalysisProperties>
+                <triggers>
+                  <skipScmCause>false</skipScmCause>
+                  <skipUpstreamCause>false</skipUpstreamCause>
+                  <envVar></envVar>
+                </triggers>
+              </hudson.plugins.sonar.SonarInstallation>
+            </installations>
+            <buildWrapperEnabled>false</buildWrapperEnabled>
+            <dataMigrated>true</dataMigrated>
+            <credentialsMigrated>true</credentialsMigrated>
+          </hudson.plugins.sonar.SonarGlobalConfiguration>
+
+- name: configure tools in jenkins
+  hosts: jenkins
+  gather_facts: no
+  vars_files:
+    - vault/jenkins-creds.yml 
+  tasks:
+    - name: Configure OWASP Dependency-Check tool
+      jenkins_script:
+        user: "{{jenkins_admin}}"
+        password: "{{jenkins_password}}"
+        url: http://127.0.0.1:8080
+        script: |
+          import org.jenkinsci.plugins.DependencyCheck.tools.DependencyCheckInstallation
+          import hudson.tools.InstallSourceProperty
+          import hudson.tools.ZipExtractionInstaller
+          
+          def dependencyCheckInstallation = new DependencyCheckInstallation(
+              'odc',
+              '/opt/',
+              [
+                  new InstallSourceProperty([
+                  new ZipExtractionInstaller(
+                        'node1',
+                        'https://github.com/jeremylong/DependencyCheck/releases/download/v8.4.0/dependency-check-8.4.0-release.zip',
+                        '/opt/dependency-check/'
+                    )
+                ])
+              ]
+          )
+          
+          def descriptor = new DependencyCheckInstallation.DescriptorImpl()
+          descriptor.setInstallations(dependencyCheckInstallation)
+          descriptor.save()
+    - name: create the tool conf of sonar runner
+      jenkins_script:
+        user: "{{jenkins_admin}}"
+        password: "{{jenkins_password}}"
+        url: http://127.0.0.1:8080
+        script: |
+          import hudson.plugins.sonar.SonarRunnerInstallation
+          import hudson.tools.InstallSourceProperty
+          import hudson.tools.ZipExtractionInstaller
+
+          def sonarInstallation = new SonarRunnerInstallation(
+                'sonar_scan',
+                null,
+                [
+                    new InstallSourceProperty([
+                    new ZipExtractionInstaller(
+                      	  'sonar',
+                          'https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006.zip',
+                          '/opt/sonar-scanner-cli-5.0.1.3006'
+                      )
+                    ])
+                ]
+              )
+
+          def descriptor = new SonarRunnerInstallation.DescriptorImpl()
+          descriptor.setInstallations(sonarInstallation)
+          descriptor.save()

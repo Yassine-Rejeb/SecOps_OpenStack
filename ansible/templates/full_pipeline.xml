@@ -1,0 +1,181 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@1326.ve643e00e9220">
+  <actions>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2144.v077a_d1928a_40"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2144.v077a_d1928a_40">
+      <jobProperties/>
+      <triggers/>
+      <parameters/>
+      <options/>
+    </org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction>
+  </actions>
+  <description>Testing DevSecOps pipeline</description>
+  <keepDependencies>false</keepDependencies>
+  <properties/>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@3774.v4a_d648d409ce">
+    <script>def githubRepo = &apos;https://github.com/Yassine-Rejeb/chatbox.git&apos;
+def githubRepoBranch = &apos;*/master&apos;
+def pythonVersion = &apos;python3&apos;
+def pipVersion = &apos;pip3&apos;
+def yumPackages = &apos;python3-pip gcc wget unzip&apos;
+def pipPackages = &apos;pymongo&apos;
+def djangoVersion = &apos;Django&apos;
+def mongoDBVersion = &apos;mongodb-org&apos;
+def mongoDBRepoURL = &apos;https://repo.mongodb.org/yum/redhat/7/mongodb-org/4.4/x86_64/&apos;
+
+def zapAPIKey = &apos;H3LL0FR0M1ENK1N5&apos;
+def zapHost = &apos;localhost&apos;
+def zapPort = 8080
+def zapHome = &apos;/usr/local/zaproxy/&apos;
+def appURL = &apos;http://localhost:8000/&apos;
+
+def sonarToken = &apos;d712a4dd53e179cf264a53e6bccb626aa6925551&apos;
+def sonarIP = &apos;{{sonarIP}}&apos;
+
+pipeline {
+    agent any
+    
+    stages {
+        stage(&apos;Checkout&apos;) {
+            steps {
+                // Checkout your source code from version control here
+                //checkout scmGit(branches: [[name: &quot;$githubRepo&quot;]], extensions: [], userRemoteConfigs: [[url: &quot;$githubRepoBranch&quot;]])
+                git &apos;https://github.com/Yassine-Rejeb/chatbox.git&apos;
+            }
+        }
+        
+        // ****************     SCA (Software Composition Analysis)
+        stage (&apos;OWASP Dependency-Check Vulnerabilities&apos;) {
+            steps {
+                sh &apos;rm -rf /home/centos/workspace/ZAP-Test/zaptemp.tmp*&apos;
+                dependencyCheck additionalArguments: &apos;&apos;&apos; 
+                    -o &quot;./&quot; 
+                    -s &quot;./&quot;
+                    -f &quot;ALL&quot; 
+                    --prettyPrint&apos;&apos;&apos;, odcInstallation: &apos;odc&apos;
+
+                dependencyCheckPublisher pattern: &apos;dependency-check-report.xml&apos;
+            }
+        }
+        // ****************     END SCA
+        
+        // ****************     SAST
+        stage (&apos;Build &amp; SonarQube Analysis&apos;) {
+            steps {
+                withSonarQubeEnv(&apos;Sonar Server&apos;) {
+                  // This expands the evironment variables SONAR_CONFIG_NAME, SONAR_HOST_URL, SONAR_AUTH_TOKEN that can be used by any script.
+                  sh &apos;sonar-scanner -X -Dsonar.projectKey=test104 -Dsonar.sources=. -Dsonar.host.url=&quot;http://$sonarIP:9000&quot; -Dsonar.token=&quot;$sonarToken&quot;&apos;
+                }
+
+            }
+        }
+        stage (&apos;Quality Gate&apos;) {
+            steps {
+                timeout(time: 5, unit: &apos;MINUTES&apos;) {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+        // ****************     END SAST
+        
+        // ****************     BUILD
+        stage(&apos;Build&apos;) {
+            steps {
+                
+                script {
+                    // Install Python 3 and necessary build tools
+                    sh &quot;sudo dnf install -y $pythonVersion $yumPackages&quot;
+
+                    // Install Django using pip
+                    sh &quot;$pipVersion install $djangoVersion&quot;
+                    
+                    // Install Django using pip
+                    sh &quot;$pipVersion install $pipPackages&quot;
+
+                    // Install MongoDB packages
+                    sh &quot;&quot;&quot;
+                    sudo dnf install nano -y
+                    echo &quot;[mongodb-org]&quot; | sudo tee /etc/yum.repos.d/mongodb-org.repo
+                    echo &quot;name=MongoDB Repository&quot; | sudo tee -a /etc/yum.repos.d/mongodb-org.repo
+                    echo &quot;baseurl=$mongoDBRepoURL&quot; | sudo tee -a /etc/yum.repos.d/mongodb-org.repo
+                    echo &quot;gpgcheck=0&quot; | sudo tee -a /etc/yum.repos.d/mongodb-org.repo
+                    echo &quot;enabled=1&quot; | sudo tee -a /etc/yum.repos.d/mongodb-org.repo
+                    sudo dnf install $mongoDBVersion -y
+                    sudo systemctl enable mongod --now
+                    &quot;&quot;&quot;
+                    
+                    // Build your Django app here (e.g., migrations, collectstatic, etc.)
+                    //sh &quot;$pythonVersion manage.py migrate&quot;
+                    //sh &quot;$pythonVersion manage.py collectstatic --noinput&quot;
+                    sh &quot;$pythonVersion manage.py runserver &amp;&quot;
+                }
+            }
+        }
+        // ****************     END  BUILD
+
+        // ****************     DAST
+        stage(&apos;Run ZAP Scan&apos;) {
+            steps {
+                //Prepare 
+                script{
+                    sh &quot;mkdir -p /home/centos/workspace/zap-reports/${env.jobName}&quot;
+                }
+                script{
+                    startZap host: zapHost, port: zapPort, timeout: 60, zapHome: zapHome, externalZap: false, additionalConfigurations: [&quot;api.key = $zapAPIKey&quot;,&quot;api.disablekey = false&quot;]
+                    // Start ZAP
+                }
+                script {
+                    // Running spider scan on the app
+                    def spider_response = httpRequest url: &quot;http://$zapHost:$zapPort/JSON/spider/action/scan/?apikey=$zapAPIKey&amp;url=$appURL&quot;,
+                        httpMode: &apos;GET&apos;,
+                        validResponseCodes: &apos;100:699&apos;,
+                        acceptType: &apos;APPLICATION_JSON&apos;,
+                        contentType: &apos;APPLICATION_JSON&apos;
+                        //query: [apikey: &quot;H3LL0FR0M1ENK1N5&quot;, url: &quot;http%3A%2F%2Flocalhost%3A8000%2F&quot;]
+                    
+                    echo spider_response.content
+
+                    def json = readJSON text: spider_response.content
+                    def scanNum = json.scan as Integer
+                    
+                    // Saving the result of the crawler
+                    def spider_view_response = httpRequest url: &quot;http://$zapHost:$zapPort/JSON/spider/view/results/?apikey=$zapAPIKey&amp;scanId=$scanNum&quot;,
+                        httpMode: &apos;GET&apos;,
+                        validResponseCodes: &apos;100:699&apos;,
+                        acceptType: &apos;APPLICATION_JSON&apos;,
+                        contentType: &apos;APPLICATION_JSON&apos;
+                        //query: [apikey: &quot;H3LL0FR0M1ENK1N5&quot;, scanId: &quot;2&quot;]
+                    
+                    echo spider_view_response.content
+
+                    writeFile file: &quot;../zap-reports/$env.jobName/crawl_result.json&quot;, text: spider_view_response.content
+
+                    // Run attack
+                    def attack_response = httpRequest url: &quot;http://$zapHost:$zapPort/JSON/ascan/action/scan/?apikey=$zapAPIKey&amp;url=$appURL&amp;recurse=true&amp;inScopeOnly=&amp;scanPolicyName=&amp;method=&amp;postData=&amp;contextId=&quot;,
+                        httpMode: &apos;GET&apos;,
+                        validResponseCodes: &apos;100:399&apos;,
+                        acceptType: &apos;APPLICATION_JSON&apos;,
+                        contentType: &apos;APPLICATION_JSON&apos;
+                    
+                    echo attack_response.content
+
+                    // Get The report (JSON)                
+                    def response = httpRequest url: &quot;http://$zapHost:$zapPort/JSON/core/view/alerts/?apikey=$zapAPIKey&amp;baseurl=$appURL&amp;start=&amp;count=&quot;,
+                        httpMode: &apos;GET&apos;,
+                        validResponseCodes: &apos;100:399&apos;,
+                        acceptType: &apos;APPLICATION_JSON&apos;,
+                        contentType: &apos;APPLICATION_JSON&apos;
+
+                    writeFile file: &apos;../zap-reports/report.json&apos;, text: response.content
+                    
+                }
+                // ****************     END  DAST
+            }
+        }
+    }
+}</script>
+    <sandbox>false</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

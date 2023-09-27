@@ -1,0 +1,41 @@
+- name: Configure Jenkins server and tools
+  hosts: remote_jenkins
+  gather_facts: no
+  vars_files:
+    - vars/jenkins_vars.yml
+    - vault/jenkins-creds.yml
+  tasks:
+    - name: Install python3-pip
+      package:
+        name: python3-pip
+        state: present
+
+    - name: Install the library python-jenkins
+      pip:
+        name: python-jenkins
+        state: present
+
+    - name: Get the IP of sonar
+      command: terraform -chdir={{terraform_path}} output -raw sonar_floating_ip
+      register: sonarIP
+      delegate_to: localhost
+
+    - name: Create a Jenkins job using basic authentication
+      community.general.jenkins_job:
+        config: "{{ lookup('file', 'templates/full_pipeline.xml') }}"
+        name: Full_Pipeline
+        password: "{{jenkins_password}}"
+        url: http://127.0.0.1:8080
+        user: "{{jenkins_admin}}"
+        
+    - name: Create a Jenkins job using basic authentication
+      community.general.jenkins_job:
+        config: "{{ lookup('file', 'templates/Production_Server_Compliance.xml') }}"
+        name: Production_Server_Compliance
+        password: "{{jenkins_password}}"
+        url: http://127.0.0.1:8080
+        user: "{{jenkins_admin}}"
+    - name: Restart Jenkins
+      systemd:
+        name: jenkins
+        state: restarted

@@ -1,0 +1,62 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@1326.ve643e00e9220">
+  <actions>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2144.v077a_d1928a_40"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2144.v077a_d1928a_40">
+      <jobProperties/>
+      <triggers/>
+      <parameters/>
+      <options/>
+    </org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction>
+  </actions>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
+      <abortPrevious>false</abortPrevious>
+    </org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@3774.v4a_d648d409ce">
+    <script>// Set the path to your SCAP content profile XML
+def scapProfile = &apos;pci-dss&apos;
+def reportDir = &apos;../oscap_reports/$JOB_NAME/$BUILD_NUMBER&apos;
+def scapFile = &apos;/usr/share/xml/scap/ssg/content/ssg-centos8-xccdf.xml&apos;
+pipeline {
+    agent any
+    
+    stages {
+        stage(&apos;SCAP Scan&apos;) {
+            steps {
+                script {
+                    // Make the directory
+                    def mkdir = &quot;sudo mkdir -p $reportDir&quot;
+                    // Run the OpenSCAP scan
+                    def scanCommand = &quot;sudo oscap xccdf eval --profile $scapProfile --results $reportDir/report.xml $scapFile&quot;
+
+                    catchError(buildResult: &apos;SUCCESS&apos;, stageResult: &apos;SUCCESS&apos;) {
+                        sh &quot;&quot;&quot;
+                        # Execute the scan
+                        $mkdir
+                        $scanCommand
+                        &quot;&quot;&quot;
+                    }
+                    
+                }
+            }
+        }
+        stage(&apos;SCAP report&apos;){
+            steps{
+                script{
+                    sh &quot;sudo oscap xccdf generate report $reportDir/report.xml &gt; $reportDir/report.html&quot;
+                }
+                publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: true, reportDir: &quot;$reportDir&quot;, reportFiles: &apos;report.html&apos;, reportName: &quot;HTML Report for $JOB_NAME (build $BUILD_NUMBER)&quot;, reportTitles: &apos;&apos;, useWrapperFileDirectly: true])
+            }
+        }
+    }
+}
+</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

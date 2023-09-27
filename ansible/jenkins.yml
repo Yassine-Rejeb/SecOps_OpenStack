@@ -1,0 +1,183 @@
+---
+- name: Configure Jenkins VM
+  hosts: remote_jenkins
+  gather_facts: no
+  vars_files:
+    - vault/jenkins-creds.yml
+    - vault/user-pass.yml
+    - vars/jenkins_vars.yml
+  tasks:
+    - name: Set new password for the user
+      ansible.builtin.user:
+        name: centos
+        password: "{{ password | password_hash('sha512' ) }}"
+        update_password: always
+      ignore_errors: yes
+    
+    - name : "nmcli dns : 8.8.8.8"
+      command: nmcli connection modify System\ eth0 ipv4.dns 8.8.8.8
+    
+    - name: "Correcting centos repos"
+      shell: |
+        sudo sed -i 's/^mirrorlist=/#mirrorlist=/g' /etc/yum.repos.d/CentOS-*
+        sudo sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
+    
+    - name: restart NetworkManager
+      service:
+        name: NetworkManager
+        state: restarted
+    
+    - name: Installing java-openjdk17
+      package:
+        name: java-17-openjdk-devel.x86_64,git
+        state: present
+    
+    - name: Adding the jenkins repo
+      yum_repository:
+        name: jenkins
+        description: Jenkins repo
+        baseurl: http://pkg.jenkins.io/redhat-stable
+        gpgcheck: yes
+        gpgkey: https://pkg.jenkins.io/redhat-stable/jenkins.io.key
+        enabled: yes
+    
+    - name: Adding jenkins key
+      rpm_key:
+        key: https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
+        state: present
+    
+    - name: Installing Jenkins
+      yum:
+        name: jenkins-2.401.3-1.1
+        state: present
+        validate_certs: False
+    - name: Set TimeoutStartSec to infinity in jenkins.service
+      blockinfile:
+        path: /usr/lib/systemd/system/jenkins.service
+        marker: "# {mark} ANSIBLE MANAGED BLOCK"
+        insertafter: "^\\[Service\\]"
+        block: |
+          TimeoutStartSec=infinity
+
+    - name: Daemon-reload
+      systemd:
+        daemon_reload: yes
+
+    - name: Enable and start jenkins
+      service:
+        name: jenkins
+        state: started
+        enabled: yes
+      ignore_errors: yes
+    
+    - name: get the public IP of jenkins
+      command: "terraform -chdir={{terraform_path}} output -raw jenkins_floating_ip"
+      register: jenkins_ip
+      delegate_to: localhost
+
+    - name: Get the jenkins-cli.jar
+      get_url:
+        url: "http://{{jenkins_ip.stdout}}:8080/jnlpJars/jenkins-cli.jar"
+        dest: /home/centos/jenkins-cli.jar
+
+    - command: "sudo cat /var/lib/jenkins/secrets/initialAdminPassword"
+      register: adminPass
+    
+    - name: Get the temporary adminPass
+      debug:
+        var: adminPass
+
+    - name: change the jenkinsUrl in the locationconf file
+      lineinfile:
+        path: "{{jenkins_model_xml}}"
+        regexp: "<jenkinsUrl>"
+        line: "<jenkinsUrl>http://{{jenkins_ip.stdout}}:8080/</jenkinsUrl>"
+      delegate_to: localhost
+    
+    - name: "Turn the number of executors on the Built-in node to 0"
+      lineinfile:
+        path: /var/lib/jenkins/config.xml
+        regexp: "<numExecutors>"
+        line: "<numExecutors>0</numExecutors>"
+    
+    - name: Read The Init Groovy script from file
+      set_fact:
+        init_script: "{{ lookup('file', init_groovy_script) }}"
+    
+    - name: Execute The Init Groovy script
+      jenkins_script:
+        script: "{{ init_script }}"
+        user: admin
+        password: "{{adminPass.stdout}}"
+      ignore_errors: yes
+   
+    - name: Read The UserCreation Groovy script from file
+      set_fact:
+        user_script: "{{ lookup('file', usercreation_groovy) }}"
+
+    - name: Execute The UserCreation Groovy script
+      jenkins_script:
+        script: "{{ user_script }}" 
+        user: "admin" 
+        password: "{{adminPass.stdout}}"
+      ignore_errors: yes
+
+    - name: copy the location conf file
+      copy:
+        src: "{{jenkins_model_xml}}"
+        dest: /var/lib/jenkins/
+        owner: jenkins
+        group: jenkins
+
+    - name: Read The createToken Groovy script from file
+      set_fact:
+        token_script: "{{ lookup('file', token_groovy) }}"
+
+    - name: Execute The createToken Groovy script
+      jenkins_script:
+        script: "{{ token_script }}"
+        user: admin
+        password: "{{adminPass.stdout}}"
+      ignore_errors: yes
+
+    - name: Stop jenkins
+      service:
+        name: jenkins
+        state: stopped
+      ignore_errors: yes
+    
+    - name: Start jenkins 
+      service:
+        name: jenkins
+        state: started
+      ignore_errors: yes
+
+    - name: Get the token
+      fetch:
+        src: /tmp/admin
+        dest: "{{token_path}}"
+    
+    - name: Cat the API_Token
+      command: "cat /tmp/admin"
+      register: api_token
+    
+    - name: Create a conf file
+      copy:
+        src: "{{conf_xml}}"
+        dest: /home/centos/conf.xml
+    
+    - name: Create a new node
+      shell: |
+        cat /home/centos/conf.xml | java -jar /home/centos/jenkins-cli.jar -auth admin:{{api_token.stdout}} -s http://127.0.0.1:8080/ create-node node1
+      ignore_errors: yes
+    
+    - name: Get the secret
+      shell: |
+        echo 'println jenkins.model.Jenkins.instance.nodesObject.getNode("node1")?.computer?.jnlpMac' | java -jar /home/centos/jenkins-cli.jar -auth admin:{{api_token.stdout}} -s http://127.0.0.1:8080/ groovy =
+      register: slave_secret
+    
+    - name: Save that secret in case
+      copy:
+        content: "{{slave_secret.stdout}}"
+        dest: "{{slave_secret_file}}"
+      delegate_to: localhost

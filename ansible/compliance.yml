@@ -1,0 +1,56 @@
+---
+- name: Install OpenSCAP on the sonar vm
+  hosts: prod
+  gather_facts: no
+  tasks:
+    - name: Install OpenSCAP
+      yum:
+        name: openscap-utils
+        state: present
+    - name: install scap-security-guide
+      yum:
+        name: scap-security-guide,unzip
+        state: present
+- name: Install Sonar Scanner
+  hosts: prod
+  gather_facts: no
+  tasks:
+    - name: Download the sonar scanner zip
+      get_url:
+        url: https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006.zip
+        dest: /opt/sonar_scanner_cli.zip
+    - name: Unarchive the zip
+      unarchive:
+        src: /opt/sonar_scanner_cli.zip
+        dest: /opt/
+        remote_src: yes
+    - name: Symbolic Link to sonar-scanner
+      file:
+        src: /opt/sonar-scanner-5.0.1.3006/bin/sonar-scanner
+        dest: /usr/bin/sonar-scanner
+        state: link
+- name: Get ZAP
+  hosts: prod
+  gather_facts: no
+  tasks: 
+    - name: Install dependencies
+      package:
+        name: "{{item}}"
+        state: present
+      loop:
+        - libjpeg-devel
+        - zlib-devel
+        - python3-devel
+    - name: Install Pillow
+      pip:
+        name: Pillow
+        state: present
+    - name: Download Installer
+      get_url:
+        url: https://github.com/zaproxy/zaproxy/releases/download/v2.13.0/ZAP_2_13_0_unix.sh
+        dest: /opt/
+    - copy:
+        content: ./input
+        dest: /opt/input
+    - name: Execute
+      shell: "chmod u+x /opt/ZAP_2_13_0_unix.sh; /opt/ZAP_2_13_0_unix.sh < input"

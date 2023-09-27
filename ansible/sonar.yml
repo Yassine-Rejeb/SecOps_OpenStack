@@ -1,0 +1,45 @@
+---
+- name: Install SonarQube with PostgreSQL on Podman
+  hosts: sonar
+  gather_facts: no
+  tasks:
+    - name: Install Podman
+      package:
+        name: podman
+        state: present
+
+    - name: Pull PostgreSQL Docker Image
+      containers.podman.podman_image:
+        name: postgres:latest
+        pull: yes
+
+    - name: Create PostgreSQL Container
+      containers.podman.podman_container:
+        name: postgresql
+        image: postgres:latest
+        state: started
+        ports:
+          - "5432:5432"
+        env:
+          POSTGRES_USER: sonar
+          POSTGRES_PASSWORD: sonar
+          POSTGRES_DB: sonar
+
+    - name: Pull SonarQube Docker Image
+      containers.podman.podman_image:
+        name: sonarqube:latest
+        pull: yes
+
+    - name: Create SonarQube Container
+      containers.podman.podman_container:
+        name: sonarqube
+        image: sonarqube:latest
+        state: started
+        ports:
+          - "9000:9000"
+          - "9092:9092"
+        env:
+          SONARQUBE_JDBC_URL: jdbc:postgresql://postgresql:5432/sonar
+          SONARQUBE_JDBC_USERNAME: sonar
+          SONARQUBE_JDBC_PASSWORD: sonar
+
