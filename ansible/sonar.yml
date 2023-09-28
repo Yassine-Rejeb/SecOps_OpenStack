@@ -2,7 +2,28 @@
 - name: Install SonarQube with PostgreSQL on Podman
   hosts: sonar
   gather_facts: no
+  vars_files:
+    - vault/user-pass.yml
   tasks:
+    - name: Set new password for the user
+      ansible.builtin.user:
+        name: centos
+        password: "{{ password | password_hash('sha512' ) }}"
+        update_password: always
+      ignore_errors: yes
+
+    - name : "nmcli dns : 8.8.8.8"
+      command: nmcli connection modify System\ eth0 ipv4.dns 8.8.8.8
+
+    - name: "Correcting centos repos"
+      shell: |
+        sudo sed -i 's/^mirrorlist=/#mirrorlist=/g' /etc/yum.repos.d/CentOS-*
+        sudo sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
+
+    - name: restart NetworkManager
+      service:
+        name: NetworkManager
+        state: restarted
     - name: Install Podman
       package:
         name: podman

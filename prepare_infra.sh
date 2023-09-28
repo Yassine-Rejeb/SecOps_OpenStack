@@ -54,6 +54,7 @@ read -p "To proceed, we need authorization to setup devstack. Would you like to 
 if [ "$stack_it" = "y" ]; then
         ./devstack.sh > $(pwd)/setup_logs/devstack.log
         source setup/openrc
+	openstack flavor create --id 4c10s --vcpus 4 --ram 4096 --swap 256 --disk 10 --public 4c10s
         openstack flavor create --id d3p --vcpus 2 --ram 4096 --swap 256 --disk 20 --public ds4G-
         openstack image create --disk-format qcow2 --min-disk 8 --min-ram 512 --public --id a7167185-6aa1-4e50-b30b-f26c9fddcf76 --file ./setup/centos8.qcow2 centos
         openstack router add subnet router1 shared-subnet
@@ -94,7 +95,7 @@ if [ ! -f progress.log ]; then
 	echo "prod.yml: 0" >> progress.log
 	echo "sonar.yml: 0" >> progress.log
 	echo "jenkins-plugins.yml: 0" >> progress.log
-	echo "compliance.yml: 0" >> progress.log
+	echo "prod-tools.yml: 0" >> progress.log
 fi
 # Check the state of jenkins.yml in the log file
 jenkins=$(grep -E 'jenkins.yml: 0' progress.log; echo '')
@@ -136,7 +137,7 @@ plugins=$(grep -E 'jenkins-plugins.yml: 0' progress.log; echo '')
 if [ "$plugins" = "jenkins-plugins.yml: 0" ]; then
         read -p "We will now install jenkins plugins (high internet bandwifth is required). Would you like to proceed? [If you do not approve we will than copy a pre-installed plugins folder to the instance running Jenkins] (y/n): " plugins
         if [ "$plugins" = "y" ]; then
-                ansible-playbook --private-key ~/.ssh/jenkins jenkins-plugins.yml --vault-password-file vault_pass #> $(pwd)/../setup_logs/ansible/compliance.log
+                ansible-playbook --private-key ~/.ssh/jenkins jenkins-plugins.yml --vault-password-file vault_pass 
         else
                 scp -i ~/.ssh/jenkins ../files/plugins.tar  centos@remote_jenkins:/tmp/
                 ssh centos@remote_jenkins -i /home/$USER/.ssh/jenkins sudo tar -xf /tmp/plugins.tar -C /var/lib/jenkins/ >/dev/null 2>&1
@@ -147,13 +148,13 @@ else
         echo -e "${RED}Skipping...${NC}"
 fi
 
-# Check the state of compliance.yml in the log file
-compliance=$(grep -E 'compliance.yml: 0' progress.log); echo ''
+# Check the state of prod-tools.yml in the log file
+prod_tools=$(grep -E 'prod-tools.yml: 0' progress.log); echo ''
 
 # If the state is 0, run the playbook
-if [ "$compliance" = "compliance.yml: 0" ]; then
-        ansible-playbook --private-key ~/.ssh/prod compliance.yml --vault-password-file vault_pass
-        sed -iE 's/compliance.yml: 0/compliance.yml: 1/g' progress.log
+if [ "$prod_tools" = "prod-tools.yml: 0" ]; then
+        ansible-playbook --private-key ~/.ssh/prod prod-tools.yml --vault-password-file vault_pass
+        sed -iE 's/prod-tools.yml: 0/prod-tools.yml: 1/g' progress.log
 else
         echo -e "${RED}Skipping...${NC}"
 fi

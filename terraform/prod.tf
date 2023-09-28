@@ -40,7 +40,7 @@ resource "openstack_networking_floatingip_v2" "Public_IP_prod" {
 resource "openstack_compute_instance_v2" "prod" {
   name            = "prod"
   image_id        = "a7167185-6aa1-4e50-b30b-f26c9fddcf76"
-  flavor_id       = "d3"
+  flavor_id       = "4c10s"
   key_pair        = "${openstack_compute_keypair_v2.ssh_prod.name}"
   security_groups = ["${openstack_compute_secgroup_v2.sg_prod.name}"]
   network {

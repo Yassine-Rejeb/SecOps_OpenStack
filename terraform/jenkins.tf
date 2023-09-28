@@ -34,7 +34,7 @@ resource "openstack_networking_floatingip_v2" "public_ip_jenkins" {
 resource "openstack_compute_instance_v2" "jenkins" {
   name            = "jenkins"
   image_id        = "a7167185-6aa1-4e50-b30b-f26c9fddcf76"
-  flavor_id       = "d3p"
+  flavor_id       = "d4"
   key_pair        = "${openstack_compute_keypair_v2.ssh_jenkins.name}"
   security_groups = ["${openstack_compute_secgroup_v2.sg_jenkins.name}"]
   network {

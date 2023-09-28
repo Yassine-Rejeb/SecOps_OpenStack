@@ -29,7 +29,7 @@
     
     - name: Installing java-openjdk17
       package:
-        name: java-17-openjdk-devel.x86_64,git
+        name: java-11-openjdk.x86_64,git
         state: present
     
     - name: Adding the jenkins repo
@@ -51,6 +51,7 @@
         name: jenkins-2.401.3-1.1
         state: present
         validate_certs: False
+    
     - name: Set TimeoutStartSec to infinity in jenkins.service
       blockinfile:
         path: /usr/lib/systemd/system/jenkins.service
@@ -58,6 +59,12 @@
         insertafter: "^\\[Service\\]"
         block: |
           TimeoutStartSec=infinity
+
+    - name: Add xmx 1g to unit file
+      lineinfile:
+        path: /usr/lib/systemd/system/jenkins.service
+        regexp: 'Environment="JAVA_OPTS=-Djava.awt.headless=true"'
+        line: 'Environment="JAVA_OPTS=-Djava.awt.headless=true -Xmx1g"'
 
     - name: Daemon-reload
       systemd:
