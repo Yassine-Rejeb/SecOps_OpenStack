@@ -1,0 +1,52 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@1326.ve643e00e9220">
+  <actions>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2144.v077a_d1928a_40"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2144.v077a_d1928a_40">
+      <jobProperties/>
+      <triggers/>
+      <parameters/>
+      <options/>
+    </org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction>
+  </actions>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties/>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@3774.v4a_d648d409ce">
+    <script>def githubRepo = &apos;https://github.com/Yassine-Rejeb/chatbox.git&apos;
+def githubRepoBranch = &apos;*/master&apos;
+def appURL = &apos;http://localhost:8000/&apos;
+
+pipeline {
+    agent any
+
+    stages {
+        stage(&apos;Checkout&apos;) {
+            steps {
+                // Checkout your source code from version control here
+                //checkout scmGit(branches: [[name: &quot;$githubRepo&quot;]], extensions: [], userRemoteConfigs: [[url: &quot;$githubRepoBranch&quot;]])
+                git &apos;https://github.com/Yassine-Rejeb/chatbox.git&apos;
+            }
+        }
+
+        // ****************     SCA (Software Composition Analysis)
+        stage (&apos;OWASP Dependency-Check Vulnerabilities&apos;) {
+            steps {
+                sh &apos;rm -rf /home/centos/workspace/ZAP-Test/zaptemp.tmp*&apos;
+                dependencyCheck additionalArguments: &apos;&apos;&apos;
+                    -o &quot;./&quot;
+                    -s &quot;./&quot;
+                    -f &quot;ALL&quot;
+                    --prettyPrint&apos;&apos;&apos;, odcInstallation: &apos;odc&apos;
+
+                dependencyCheckPublisher pattern: &apos;dependency-check-report.xml&apos;
+            }
+        }
+        // ****************     END SCA
+    }
+}</script>
+    <sandbox>false</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

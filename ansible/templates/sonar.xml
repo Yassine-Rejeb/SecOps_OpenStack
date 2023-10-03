@@ -1,0 +1,57 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@1326.ve643e00e9220">
+  <actions>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2144.v077a_d1928a_40"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2144.v077a_d1928a_40">
+      <jobProperties/>
+      <triggers/>
+      <parameters/>
+      <options/>
+    </org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction>
+  </actions>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties/>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@3774.v4a_d648d409ce">
+    <script>def githubRepo = &apos;https://github.com/Yassine-Rejeb/chatbox.git&apos;
+def githubRepoBranch = &apos;*/master&apos;
+def sonarIP = &aposSonarServer&apos;
+def sonarToken = &apos;d712a4dd53e179cf264a53e6bccb626aa6925551&apos;
+
+pipeline {
+    agent any
+
+    stages {
+        stage(&apos;Checkout&apos;) {
+            steps {
+                // Checkout your source code from version control here
+                //checkout scmGit(branches: [[name: &quot;$githubRepo&quot;]], extensions: [], userRemoteConfigs: [[url: &quot;$githubRepoBranch&quot;]])
+                git &apos;https://github.com/Yassine-Rejeb/chatbox.git&apos;
+            }
+        }
+
+        // ****************     SAST
+        stage (&apos;Build &amp; SonarQube Analysis&apos;) {
+            steps {
+                withSonarQubeEnv(&apos;Sonar Server&apos;) {
+                  // This expands the evironment variables SONAR_CONFIG_NAME, SONAR_HOST_URL, SONAR_AUTH_TOKEN that can be used by any script.
+                  sh &apos;sonar-scanner -X -Dsonar.projectKey=SAST-scan-1 -Dsonar.sources=. -Dsonar.host.url=http://$sonarIP;:9000 -Dsonar.token=&quot;$sonarToken&quot;&apos;
+                }
+
+            }
+        }
+        stage (&apos;Quality Gate&apos;) {
+            steps {
+                timeout(time: 150, unit: &apos;MINUTES&apos;) {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+        // ****************     END SAST
+    }
+}</script>
+    <sandbox>false</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

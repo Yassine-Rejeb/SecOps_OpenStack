@@ -1,0 +1,8 @@
+**/.terraform/*
+!**/.terraform/*.tfstate
+!**/.terraform/*.tfstate.backup
+**/setup/*
+!**/setup/getCentOSCloud.sh
+!**/setup/openrc
+**/files/plugins.tar
+**/secrets/*
