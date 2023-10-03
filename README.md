@@ -21,8 +21,9 @@ export OS_AUTH_URL=http://{{IP@}}/identity
 
 3. Run prepare_infra.sh, accept everything at first run.
 
-PS: This WILL take a LONG time, and you are needed in the first 10-15 minutes to fill some needed variables (like the password for openstack admin user and other passwords and things, ADVICE: Document everything you type) after those 15 minutes you can go have a coffee.
-
+PS:
+*  This WILL take a LONG time, and you are needed in the first 10-15 minutes to fill some needed variables (like the password for openstack admin user and other passwords and things, ADVICE: Document everything you type) after those 15 minutes you can go have a coffee.
+* Make sure that you download jenkins plugins yourself when prompted cause they are not in the folder to be copied easily to the inside of the cloud instance.
 4. There may be some errors cause of internet connectivity or lack of performance, either way running the script again while refusing all the prompts will solve the issue. 
 (PS: If the issue did not stop the script, it's not worth worrying about)
 
