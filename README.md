@@ -1,6 +1,6 @@
 # Automating the implementation of a DevSecOps Environment and pipeline
 
-In this project, I use a set of tools: OpenStack, Ansible, terraform to automate the set up of an DevSecOps environment for the purepose of running a sec pipeline : 
+In this project, I use a set of tools: OpenStack, Ansible, terraform to automate the set up of a DevSecOps environment for the purepose of running a sec pipeline : 
 git checkout -> SCA (OWASP Dependency Check) -> SAST (Sonarqube) -> Building the code -> DAST (OWASP ZAP)
 
 ![image](https://github.com/Yassine-Rejeb/SecOps_OpenStack/assets/77154735/8b3beb09-c0a4-4a67-8c95-c8f1f3708ea2)
